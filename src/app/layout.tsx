@@ -1,14 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
-import {
-  ClerkProvider,
-  ClerkLoaded,
-  SignInButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
+import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import "@/app/globals.css";
 
@@ -46,6 +40,7 @@ export default function RootLayout({
             fontBody.variable
           )}
         >
+          <Header />
           {children}
         </body>
       </html>
