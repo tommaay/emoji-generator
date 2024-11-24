@@ -1,8 +1,8 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Header } from "@/components/header";
+import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import "@/app/globals.css";
 
@@ -21,8 +21,8 @@ const fontBody = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Emoji Generator",
-  description: "Generate custom emojis with AI",
+  title: "Image Generator",
+  description: "Generate custom images with AI",
 };
 
 export default function RootLayout({
@@ -42,6 +42,7 @@ export default function RootLayout({
         >
           <Header />
           {children}
+          <Toaster />
         </body>
       </html>
     </ClerkProvider>
