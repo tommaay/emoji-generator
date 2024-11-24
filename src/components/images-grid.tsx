@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 interface Image {
-  id: number;
+  id: string;
   image_url: string;
   prompt: string;
   likes_count: number;
@@ -18,20 +18,10 @@ interface Image {
 
 interface ImageGridProps {
   images: Image[];
-  userId?: string;
 }
 
-export function ImageGrid({ images, userId }: ImageGridProps) {
-  const handleLike = async (imageId: number) => {
-    if (!userId) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "You must be logged in to like images",
-      });
-      return;
-    }
-
+export function ImageGrid({ images }: ImageGridProps) {
+  const handleLike = async (imageId: string) => {
     try {
       const result = await toggleLike({ imageId });
 
@@ -86,7 +76,7 @@ export function ImageGrid({ images, userId }: ImageGridProps) {
           ) : image.image_url ? (
             <div className="relative w-full h-full">
               <Image
-                src={image.image_url}
+                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${image.image_url}`}
                 alt={`AI generated image for "${image.prompt}"`}
                 fill
                 className="object-cover rounded-lg"

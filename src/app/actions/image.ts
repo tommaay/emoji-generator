@@ -1,12 +1,12 @@
 "use server";
 
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { images, imageLikes } from "@/db/schema";
 import { supabase } from "@/lib/supabase";
 import { eq, and, sql } from "drizzle-orm";
 import Replicate from "replicate";
 import { ActionResponse } from "@/types/actions";
-import { ensureUserExists } from "./auth";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -21,73 +21,87 @@ export async function generateImage({
 }: GenerateImageParams): Promise<ActionResponse<{ imageUrl: string }>> {
   try {
     // Ensure user exists and get userId
-    const userResult = await ensureUserExists();
-    if (!userResult.success)
-      return {
-        success: false,
-        error: userResult.error,
-      };
+    const { userId } = await auth();
 
-    const { userId } = userResult.data ?? {};
     if (!userId)
       return {
         success: false,
-        error: "User ID not found",
+        error: "User is not authenticated",
       };
 
     // Generate image using Replicate
-    const output: string[] = (await replicate.run(
-      "fpsorg/image:2489b7892129c47ec8590fd3e86270b8804f2ff07faeae8c306342fad2f48df6",
-      {
-        input: {
-          model: "dev",
-          prompt,
-          lora_scale: 1,
-          num_outputs: 1,
-          aspect_ratio: "1:1",
-          output_format: "webp",
-          guidance_scale: 3.5,
-          output_quality: 90,
-          prompt_strength: 0.8,
-          extra_lora_scale: 1,
-          num_inference_steps: 28,
-        },
-      }
-    )) as string[];
+    const outputArray = (await replicate.run("black-forest-labs/flux-schnell", {
+      input: {
+        prompt,
+        disable_safety_checker: true,
+      },
+    })) as ReadableStream<Uint8Array>[];
 
-    if (!output || !output[0])
+    // Read the stream to get the image URL
+    const output = outputArray[0];
+    const reader = output.getReader();
+    const chunks: Uint8Array[] = [];
+    let done = false;
+
+    // Read all chunks from the stream
+    while (!done) {
+      const { value, done: isDone } = await reader.read();
+      if (value) chunks.push(value);
+      done = isDone;
+    }
+
+    // Combine chunks into a single Uint8Array
+    const imageData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let position = 0;
+    for (const chunk of chunks) {
+      imageData.set(chunk, position);
+      position += chunk.length;
+    }
+
+    // Create a Blob from the Uint8Array
+    const blob = new Blob([imageData], { type: "image/webp" });
+    const imageUrl = URL.createObjectURL(blob);
+
+    if (!imageUrl)
       return {
         success: false,
         error: "Failed to generate image",
       };
 
-    const imageUrl = output[0];
+    // Convert Blob to File for Supabase upload
+    const file = new File([blob], `generated-image-${Date.now()}.webp`, { type: "image/webp" });
 
-    // Upload to Supabase storage
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    const fileName = `${userId}/${Date.now()}.png`;
-
-    const { error: uploadError } = await supabase.storage.from("images").upload(fileName, blob);
-
-    if (uploadError) throw uploadError;
-
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("images").getPublicUrl(fileName);
-
-    // Save to database
-    await db.insert(images).values({
-      image_url: publicUrl,
-      prompt,
-      creator_user_id: userId,
+    // Upload the image to Supabase
+    const { data, error } = await supabase.storage.from("images").upload(`${file.name}`, file, {
+      cacheControl: "3600",
+      upsert: true,
     });
+
+    if (error) {
+      console.error("Error uploading image to Supabase:", error);
+      return {
+        success: false,
+        error: "Failed to upload image to Supabase",
+      };
+    }
+
+    // Add record to the images table
+    const imageRecord = await db.insert(images).values({
+      image_url: data.fullPath, // Use the full path from Supabase
+      prompt,
+      creator_user_id: userId, // Use the authenticated user's ID
+    });
+
+    if (!imageRecord)
+      return {
+        success: false,
+        error: "Failed to insert image record",
+      };
 
     return {
       success: true,
       data: {
-        imageUrl: publicUrl,
+        imageUrl: data.fullPath,
       },
     };
   } catch (error) {
@@ -100,24 +114,14 @@ export async function generateImage({
 }
 
 interface ToggleLikeParams {
-  imageId: number;
+  imageId: string;
 }
 
 export async function toggleLike({
   imageId,
 }: ToggleLikeParams): Promise<ActionResponse<{ liked: boolean }>> {
   try {
-    const userResult = await ensureUserExists();
-    if (!userResult.success)
-      return {
-        success: false,
-        error: userResult.error,
-        data: {
-          liked: false,
-        },
-      };
-
-    const { userId } = userResult.data ?? {};
+    const { userId } = await auth();
     if (!userId)
       return {
         success: false,

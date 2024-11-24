@@ -1,12 +1,12 @@
 CREATE TABLE IF NOT EXISTS "image_likes" (
-	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "image_likes_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
-	"user_id" text,
-	"image_id" integer,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"image_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "images" (
-	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "images_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1000 CACHE 1),
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"image_url" text NOT NULL,
 	"prompt" text NOT NULL,
 	"likes_count" integer DEFAULT 0 NOT NULL,

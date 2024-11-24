@@ -1,16 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { generateImage } from "@/app/actions/image";
-import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { toast } from "@/hooks/use-toast";
+import type { Profile } from "@/db/schema";
 
-export function SearchBar() {
+interface SearchBarProps {
+  user?: Profile;
+}
+
+export function SearchBar({ user }: SearchBarProps) {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState("");
+
+  const shouldDisableSubmit = user?.credits === 0 || prompt.trim().length === 0 || isGenerating;
+
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,6 +50,7 @@ export function SearchBar() {
 
       // Clear the input and refresh the grid
       setPrompt("");
+      setGeneratedImage(result?.data?.imageUrl || "");
       router.refresh();
       toast({
         title: "Success",
@@ -69,7 +80,7 @@ export function SearchBar() {
           disabled={isGenerating}
           maxLength={1000}
         />
-        <Button type="submit" className="w-full" disabled={isGenerating || !prompt.trim()}>
+        <Button type="submit" className="w-full" disabled={shouldDisableSubmit}>
           {isGenerating ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -86,6 +97,32 @@ export function SearchBar() {
           This might take a few seconds...
         </div>
       )}
+      {generatedImage && (
+        <div className="text-center mt-4">
+          <Image
+            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${generatedImage}`}
+            alt="Generated image"
+            className="w-full h-auto rounded-lg"
+            width={500}
+            height={500}
+          />
+        </div>
+      )}
     </div>
   );
 }
+
+// Function to convert ReadableStream to Blob
+const streamToBlob = async (stream: ReadableStream): Promise<Blob> => {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let done: boolean;
+
+  while (({ done } = await reader.read())) {
+    if (done) break;
+    const { value } = await reader.read();
+    chunks.push(value);
+  }
+
+  return new Blob(chunks);
+};
